@@ -1,9 +1,11 @@
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #f8fafc;
-  background: #111827;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  --night: #0e1330;
+  --window: #26357a;
+  --moon: #f2e9c9;
+  --calm: #7fd4c1;
+  --alarm: #ff5d5d;
+  --ink: #e8ebff;
+  font-family: ui-rounded, 'Nunito', 'Trebuchet MS', system-ui, sans-serif;
 }
 
 * {
@@ -11,32 +13,218 @@
 }
 
 html,
-body,
-#app {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-}
-
 body {
+  margin: 0;
+  height: 100%;
   overflow: hidden;
-}
-
-#app {
-  display: grid;
-  place-items: center;
-  padding: 16px;
+  background:
+    radial-gradient(ellipse 60% 55% at 78% 18%, var(--window) 0%, transparent 70%),
+    radial-gradient(circle at 12% 90%, #1a2250 0%, transparent 55%), var(--night);
+  color: var(--ink);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #game {
-  width: min(100%, 960px);
-  height: min(100%, 640px);
-  min-height: 320px;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 12px 48px rgb(0 0 0 / 35%);
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
 }
 
-canvas {
-  display: block;
+
+#hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 14px 16px;
+  pointer-events: none;
+}
+
+.hud-row {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.timer {
+  min-width: 4.2ch;
+  font-size: 2.1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--moon);
+  transform-origin: left center;
+}
+
+.timer.danger {
+  color: var(--alarm);
+}
+
+.timer.penalty {
+  animation: penalty 0.4s ease-out;
+}
+
+@keyframes penalty {
+  0% {
+    color: var(--alarm);
+    transform: scale(1.35) translateX(-3px);
+  }
+  25% {
+    transform: scale(1.35) translateX(3px);
+  }
+  50% {
+    transform: scale(1.2) translateX(-2px);
+  }
+  100% {
+    transform: scale(1) translateX(0);
+  }
+}
+
+.sleep {
+  flex: 1;
+  min-width: 0;
+}
+
+.sleep-label {
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+  opacity: 0.8;
+}
+
+.bar {
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5a7bd8, var(--calm));
+  transition: width 0.2s ease-out;
+}
+
+.face {
+  font-size: 2.2rem;
+  line-height: 1;
+  width: 2.4rem;
+  text-align: center;
+}
+
+.mute {
+  pointer-events: auto;
+  border: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font-size: 1.1rem;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.mute:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(8, 10, 28, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.overlay[hidden],
+#hud[hidden] {
+  display: none;
+}
+
+.card {
+  max-width: 460px;
+  padding: 32px 30px;
+  border-radius: 20px;
+  background: #151b45;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 24px 60px rgba(0, 0, 0, 0.5);
+  text-align: left;
+}
+
+.card h1 {
+  margin: 0 0 12px;
+  font-size: 2rem;
+  line-height: 1.15;
+  color: var(--moon);
+}
+
+.card p {
+  margin: 0 0 14px;
+  line-height: 1.55;
+  max-width: 60ch;
+}
+
+.card .stats {
+  color: var(--calm);
+  font-weight: 700;
+}
+
+.card .stats:empty {
+  display: none;
+}
+
+#start {
+  margin-top: 6px;
+  padding: 12px 26px;
+  font: inherit;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #0e1330;
+  background: var(--moon);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+#start:hover {
+  transform: scale(1.04);
+}
+
+#start:focus-visible,
+.mute:focus-visible {
+  outline: 3px solid var(--calm);
+  outline-offset: 3px;
+}
+
+@media (max-width: 520px) {
+  .timer {
+    font-size: 1.6rem;
+  }
+  .face {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timer.penalty {
+    animation: none;
+  }
+  .bar-fill {
+    transition: none;
+  }
 }

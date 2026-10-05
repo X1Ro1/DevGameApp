@@ -2,14 +2,45 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#111827" />
-    <title>Game Dev Starter</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#0e1330" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦟</text></svg>"
+    />
+    <title>Ловушка для комара</title>
   </head>
   <body>
-    <main id="app">
-      <div id="game"></div>
-    </main>
+    <canvas id="game"></canvas>
+
+    <div id="hud" hidden>
+      <div class="hud-row">
+        <div id="timer" class="timer" aria-label="Осталось секунд">30.0</div>
+        <div class="sleep">
+          <div class="sleep-label">Тишина в комнате</div>
+          <div class="bar"><div id="bar-fill" class="bar-fill"></div></div>
+        </div>
+        <div id="face" class="face" aria-hidden="true">😫</div>
+        <button id="mute" class="mute" type="button" aria-label="Звук">🔊</button>
+      </div>
+    </div>
+
+    <div id="overlay" class="overlay">
+      <div class="card">
+        <h1 id="ov-title">Ловушка для комара</h1>
+        <p id="ov-text">
+          Комары не дают уснуть. Кликай по ним, чтобы в комнате стало тихо.
+          Промах отнимает 2 секунды, а комары то и дело резко меняют курс и
+          ускоряются.
+        </p>
+        <p id="ov-stats" class="stats"></p>
+        <button id="start" type="button">Начать</button>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
