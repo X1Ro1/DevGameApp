@@ -14,26 +14,8 @@
 
 ```bash
 npm install
-npm run dev      # локально, http://localhost:5173
-npm run build    # сборка в dist/
-npm run preview  # проверить сборку
+npm run dev
+npm run build
+npm run preview
 ```
 
-## Публикация на GitHub Pages
-
-1. Положите файлы проекта в корень репозитория и сделайте `git push` в ветку `main`.
-2. В репозитории откройте **Settings → Pages** и в **Source** выберите **GitHub Actions**.
-3. Workflow `.github/workflows/deploy.yml` соберёт проект и выложит его.
-   Адрес: `https://<ваш-логин>.github.io/<имя-репозитория>/`.
-
-В `vite.config.ts` стоит `base: './'`, поэтому менять путь под имя репозитория не нужно.
-
-## Структура
-
-```
-index.html        разметка: canvas, HUD, экран меню/результата
-src/main.ts       точка входа
-src/game.ts       логика: комары, клики, таймер, шкала, отрисовка
-src/sfx.ts        звуки на WebAudio
-src/style.css     оформление
-```
