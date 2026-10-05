@@ -2,7 +2,6 @@ import { Sfx } from './sfx';
 
 type State = 'menu' | 'playing' | 'won' | 'lost';
 
-/** Все числа, которые влияют на баланс, собраны в одном месте. */
 const CFG = {
   startTime: 30, // секунд на то, чтобы заснуть
   missPenalty: 2, // штраф за промах, сек
@@ -80,12 +79,12 @@ export class Game {
   private rings: Ring[] = [];
   private texts: FloatText[] = [];
 
-  private silence = 0; // 0..100
+  private silence = 0;
   private timeLeft: number = CFG.startTime;
   private elapsed = 0;
   private hits = 0;
   private misses = 0;
-  private flash = 0; // красная вспышка при промахе
+  private flash = 0;
   private last = performance.now();
 
   constructor() {
@@ -105,14 +104,11 @@ export class Game {
       this.sfx.muted = !this.sfx.muted;
       this.muteBtn.textContent = this.sfx.muted ? '🔇' : '🔊';
     });
-
-    // Пока меню — комары просто летают на фоне.
     for (let i = 0; i < 5; i++) this.mosquitoes.push(this.spawn());
 
     requestAnimationFrame(this.frame);
   }
 
-  // ---------------------------------------------------------------- setup
 
   private resize(): void {
     this.width = window.innerWidth;
@@ -184,7 +180,6 @@ export class Game {
     }
   }
 
-  // ---------------------------------------------------------------- mosquitoes
 
   private speedMul(): number {
     return 1 + (this.silence / 100) * CFG.speedGrow;
@@ -192,7 +187,6 @@ export class Game {
 
   private spawn(): Mosquito {
     const r = rand(CFG.radiusMin, CFG.radiusMax);
-    // Появляются у случайного края экрана.
     const side = Math.floor(Math.random() * 4);
     let x = rand(r, this.width - r);
     let y = rand(r, this.height - r);
