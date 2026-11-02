@@ -20,10 +20,17 @@
       <div class="hud-row">
         <div id="timer" class="timer" aria-label="Осталось секунд">30.0</div>
         <div class="sleep">
-          <div class="sleep-label">Тишина в комнате</div>
-          <div class="bar"><div id="bar-fill" class="bar-fill"></div></div>
+          <div class="sleep-label">
+            <span>Тишина в комнате</span>
+            <span id="phase" class="phase">Фаза 1</span>
+          </div>
+          <div class="bar">
+            <div id="bar-fill" class="bar-fill"></div>
+            <div id="bar-mark" class="bar-mark" title="Здесь начнётся фаза 2"></div>
+          </div>
         </div>
         <div id="face" class="face" aria-hidden="true">😫</div>
+        <button id="pause" class="mute" type="button" aria-label="Пауза">⏸</button>
         <button id="mute" class="mute" type="button" aria-label="Звук">🔊</button>
       </div>
     </div>
@@ -34,10 +41,15 @@
         <p id="ov-text">
           Комары не дают уснуть. Кликай по ним, чтобы в комнате стало тихо.
           Промах отнимает 2 секунды, а комары то и дело резко меняют курс и
-          ускоряются.
+          ускоряются. Когда станет тише наполовину, комары озвереют: начнётся
+          фаза 2. Пауза — кнопка ⏸ или клавиша Esc / P.
         </p>
         <p id="ov-stats" class="stats"></p>
-        <button id="start" type="button">Начать</button>
+        <div class="actions">
+          <button id="start" class="btn" type="button">Начать</button>
+          <button id="resume" class="btn" type="button" hidden>Продолжить</button>
+          <button id="restart" class="btn secondary" type="button" hidden>Начать заново</button>
+        </div>
       </div>
     </div>
 

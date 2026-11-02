@@ -52,4 +52,23 @@ export class Sfx {
   lose(): void {
     this.tone(300, 70, 0.7, 'sawtooth', 0.14);
   }
+
+  /** Попадание по комару фазы 2, который пока не погиб. */
+  wound(): void {
+    this.tone(760, 320, 0.11, 'square', 0.09);
+  }
+
+  /** Комары переходят во вторую фазу. */
+  phase(): void {
+    this.tone(110, 440, 0.5, 'sawtooth', 0.14);
+    window.setTimeout(() => this.tone(165, 660, 0.45, 'sawtooth', 0.12), 180);
+  }
+
+  pause(): void {
+    this.tone(520, 340, 0.12, 'sine', 0.12);
+  }
+
+  resume(): void {
+    this.tone(340, 520, 0.12, 'sine', 0.12);
+  }
 }

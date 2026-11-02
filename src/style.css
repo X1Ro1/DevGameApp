@@ -4,6 +4,7 @@
   --moon: #f2e9c9;
   --calm: #7fd4c1;
   --alarm: #ff5d5d;
+  --rage: #d17bff;
   --ink: #e8ebff;
   font-family: ui-rounded, 'Nunito', 'Trebuchet MS', system-ui, sans-serif;
 }
@@ -71,6 +72,20 @@ body {
   animation: penalty 0.4s ease-out;
 }
 
+.timer.bonus {
+  animation: bonus 0.5s ease-out;
+}
+
+@keyframes bonus {
+  0% {
+    color: var(--calm);
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 @keyframes penalty {
   0% {
     color: var(--alarm);
@@ -93,12 +108,25 @@ body {
 }
 
 .sleep-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 0.85rem;
   margin-bottom: 4px;
   opacity: 0.8;
 }
 
+.phase {
+  font-weight: 800;
+  color: var(--calm);
+}
+
+.phase.p2 {
+  color: var(--rage);
+}
+
 .bar {
+  position: relative;
   height: 16px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
@@ -112,6 +140,20 @@ body {
   border-radius: 999px;
   background: linear-gradient(90deg, #5a7bd8, var(--calm));
   transition: width 0.2s ease-out;
+}
+
+.bar-fill.p2 {
+  background: linear-gradient(90deg, #5a7bd8, var(--rage));
+}
+
+/* Отметка на шкале: где начинается фаза 2. */
+.bar-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .face {
@@ -150,8 +192,14 @@ body {
 }
 
 .overlay[hidden],
-#hud[hidden] {
+#hud[hidden],
+.btn[hidden] {
   display: none;
+}
+
+.overlay.paused {
+  background: rgba(8, 10, 28, 0.78);
+  backdrop-filter: blur(9px);
 }
 
 .card {
@@ -187,8 +235,14 @@ body {
   display: none;
 }
 
-#start {
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-top: 6px;
+}
+
+.btn {
   padding: 12px 26px;
   font: inherit;
   font-weight: 800;
@@ -201,11 +255,16 @@ body {
   transition: transform 0.12s ease;
 }
 
-#start:hover {
+.btn.secondary {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn:hover {
   transform: scale(1.04);
 }
 
-#start:focus-visible,
+.btn:focus-visible,
 .mute:focus-visible {
   outline: 3px solid var(--calm);
   outline-offset: 3px;
@@ -221,7 +280,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .timer.penalty {
+  .timer.penalty,
+  .timer.bonus {
     animation: none;
   }
   .bar-fill {

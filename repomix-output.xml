@@ -1,0 +1,1002 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.github/
+  workflows/
+    deploy.yml
+src/
+  game.ts
+  main.ts
+  sfx.ts
+  style.css
+  vite-env.d.ts
+.gitignore
+.nvmrc
+index.html
+LICENSE
+package.json
+README.md
+tsconfig.json
+vite.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/sfx.ts">
+export class Sfx {
+  private ctx: AudioContext | null = null;
+  muted = false;
+
+
+  unlock(): void {
+    if (!this.ctx) {
+      const Ctor =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctor) return;
+      this.ctx = new Ctor();
+    }
+    if (this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
+  private tone(
+    from: number,
+    to: number,
+    duration: number,
+    type: OscillatorType,
+    volume: number,
+  ): void {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(from, t);
+    osc.frequency.exponentialRampToValueAtTime(to, t + duration);
+    gain.gain.setValueAtTime(volume, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    osc.connect(gain).connect(this.ctx.destination);
+    osc.start(t);
+    osc.stop(t + duration);
+  }
+
+  hit(): void {
+    this.tone(520, 1100, 0.12, 'triangle', 0.18);
+  }
+
+  miss(): void {
+    this.tone(180, 90, 0.22, 'sawtooth', 0.12);
+  }
+
+  win(): void {
+    this.tone(392, 392, 0.2, 'sine', 0.16);
+    window.setTimeout(() => this.tone(523, 523, 0.2, 'sine', 0.16), 140);
+    window.setTimeout(() => this.tone(659, 659, 0.45, 'sine', 0.16), 280);
+  }
+
+  lose(): void {
+    this.tone(300, 70, 0.7, 'sawtooth', 0.14);
+  }
+}
+</file>
+
+<file path="src/vite-env.d.ts">
+/// <reference types="vite/client" />
+</file>
+
+<file path=".nvmrc">
+22
+</file>
+
+<file path="LICENSE">
+MIT License
+
+Copyright (c) 2026 FEFU Game Development Course
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</file>
+
+<file path=".github/workflows/deploy.yml">
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck and build
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+</file>
+
+<file path="src/game.ts">
+import { Sfx } from './sfx';
+
+type State = 'menu' | 'playing' | 'won' | 'lost';
+
+const CFG = {
+  startTime: 30, // секунд на то, чтобы заснуть
+  missPenalty: 2, // штраф за промах, сек
+  hitGain: 7, // сколько % тишины даёт один комар
+  baseMosquitoes: 3, // комаров на экране в начале
+  extraPer: 25, // +1 комар за каждые N% тишины
+  radiusMin: 14,
+  radiusMax: 22,
+  hitSlop: 8, // «прощение» хитбокса в пикселях
+  speedMin: 130, // px/s
+  speedMax: 230,
+  speedGrow: 0.6, // на сколько ускоряются комары к концу (0.6 = +60%)
+  turnMin: 0.5, // как часто комар внезапно меняет курс, сек
+  turnMax: 1.6,
+  boostChance: 0.35, // шанс, что смена курса сопровождается рывком
+  boostMul: 2.3,
+  boostTime: 0.55,
+} as const;
+
+interface Mosquito {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  turnIn: number;
+  boostLeft: number;
+  wing: number;
+}
+
+interface Ring {
+  x: number;
+  y: number;
+  age: number;
+  color: string;
+}
+
+interface FloatText {
+  x: number;
+  y: number;
+  age: number;
+  text: string;
+  color: string;
+}
+
+const rand = (a: number, b: number): number => a + Math.random() * (b - a);
+
+function $<T extends HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Не найден элемент #${id}`);
+  return el as T;
+}
+
+export class Game {
+  private readonly canvas = $<HTMLCanvasElement>('game');
+  private readonly ctx: CanvasRenderingContext2D;
+  private readonly hud = $('hud');
+  private readonly timerEl = $('timer');
+  private readonly barEl = $('bar-fill');
+  private readonly faceEl = $('face');
+  private readonly muteBtn = $('mute');
+  private readonly overlay = $('overlay');
+  private readonly ovTitle = $('ov-title');
+  private readonly ovText = $('ov-text');
+  private readonly ovStats = $('ov-stats');
+  private readonly startBtn = $('start');
+
+  private readonly sfx = new Sfx();
+
+  private width = window.innerWidth;
+  private height = window.innerHeight;
+
+  private state: State = 'menu';
+  private mosquitoes: Mosquito[] = [];
+  private rings: Ring[] = [];
+  private texts: FloatText[] = [];
+
+  private silence = 0;
+  private timeLeft: number = CFG.startTime;
+  private elapsed = 0;
+  private hits = 0;
+  private misses = 0;
+  private flash = 0;
+  private last = performance.now();
+
+  constructor() {
+    const ctx = this.canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D не поддерживается');
+    this.ctx = ctx;
+
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+
+    this.canvas.addEventListener('pointerdown', (e) => this.onPointer(e));
+    this.startBtn.addEventListener('click', () => {
+      this.sfx.unlock();
+      this.start();
+    });
+    this.muteBtn.addEventListener('click', () => {
+      this.sfx.muted = !this.sfx.muted;
+      this.muteBtn.textContent = this.sfx.muted ? '🔇' : '🔊';
+    });
+    for (let i = 0; i < 5; i++) this.mosquitoes.push(this.spawn());
+
+    requestAnimationFrame(this.frame);
+  }
+
+
+  private resize(): void {
+    this.width = window.innerWidth;
+    this.height = window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = Math.floor(this.width * dpr);
+    this.canvas.height = Math.floor(this.height * dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Если окно уменьшили — вернуть комаров внутрь.
+    for (const m of this.mosquitoes) {
+      m.x = Math.min(Math.max(m.x, m.r), this.width - m.r);
+      m.y = Math.min(Math.max(m.y, m.r), this.height - m.r);
+    }
+  }
+
+  private start(): void {
+    this.state = 'playing';
+    this.silence = 0;
+    this.timeLeft = CFG.startTime;
+    this.elapsed = 0;
+    this.hits = 0;
+    this.misses = 0;
+    this.flash = 0;
+    this.rings = [];
+    this.texts = [];
+    this.mosquitoes = [];
+    for (let i = 0; i < CFG.baseMosquitoes; i++) this.mosquitoes.push(this.spawn());
+
+    this.overlay.hidden = true;
+    this.hud.hidden = false;
+    this.updateHud();
+  }
+
+  private finish(won: boolean): void {
+    this.state = won ? 'won' : 'lost';
+    this.hud.hidden = true;
+    this.overlay.hidden = false;
+
+    if (won) {
+      this.sfx.win();
+      const time = this.elapsed;
+      const best = this.saveBest(time);
+      this.ovTitle.textContent = 'Тишина. Он уснул 😴';
+      this.ovText.textContent = 'Последний комар замолчал, и в комнате наконец стало тихо.';
+      this.ovStats.textContent =
+        `Время: ${time.toFixed(1)} с · Промахов: ${this.misses}` +
+        (best !== null ? ` · Рекорд: ${best.toFixed(1)} с` : '');
+      this.startBtn.textContent = 'Ещё раз';
+    } else {
+      this.sfx.lose();
+      this.ovTitle.textContent = 'Не уснул 😫';
+      this.ovText.textContent = 'Время вышло, а комары всё ещё звенят над ухом.';
+      this.ovStats.textContent =
+        `Тишина: ${Math.floor(this.silence)}% · Попаданий: ${this.hits} · Промахов: ${this.misses}`;
+      this.startBtn.textContent = 'Попробовать снова';
+    }
+  }
+
+  /** Лучшее время хранится в localStorage (если он доступен). */
+  private saveBest(time: number): number | null {
+    try {
+      const key = 'mosquito-trap-best';
+      const prev = Number(localStorage.getItem(key));
+      const best = prev > 0 ? Math.min(prev, time) : time;
+      localStorage.setItem(key, String(best));
+      return best;
+    } catch {
+      return null;
+    }
+  }
+
+
+  private speedMul(): number {
+    return 1 + (this.silence / 100) * CFG.speedGrow;
+  }
+
+  private spawn(): Mosquito {
+    const r = rand(CFG.radiusMin, CFG.radiusMax);
+    const side = Math.floor(Math.random() * 4);
+    let x = rand(r, this.width - r);
+    let y = rand(r, this.height - r);
+    if (side === 0) y = r;
+    else if (side === 1) y = this.height - r;
+    else if (side === 2) x = r;
+    else x = this.width - r;
+
+    const m: Mosquito = { x, y, vx: 0, vy: 0, r, turnIn: 0, boostLeft: 0, wing: rand(0, 6) };
+    this.retarget(m);
+    return m;
+  }
+
+  /** Комар внезапно выбирает новый курс и скорость (иногда — с рывком). */
+  private retarget(m: Mosquito): void {
+    const angle = rand(0, Math.PI * 2);
+    const speed = rand(CFG.speedMin, CFG.speedMax) * this.speedMul();
+    m.vx = Math.cos(angle) * speed;
+    m.vy = Math.sin(angle) * speed;
+    m.turnIn = rand(CFG.turnMin, CFG.turnMax);
+    m.boostLeft = Math.random() < CFG.boostChance ? CFG.boostTime : 0;
+  }
+
+  private updateMosquito(m: Mosquito, dt: number): void {
+    m.wing += dt * 70;
+    m.turnIn -= dt;
+    if (m.boostLeft > 0) m.boostLeft -= dt;
+    if (m.turnIn <= 0) this.retarget(m);
+
+    const k = m.boostLeft > 0 ? CFG.boostMul : 1;
+    m.x += m.vx * k * dt;
+    m.y += m.vy * k * dt;
+
+    // Отскок от краёв окна.
+    if (m.x < m.r) {
+      m.x = m.r;
+      m.vx = Math.abs(m.vx);
+    } else if (m.x > this.width - m.r) {
+      m.x = this.width - m.r;
+      m.vx = -Math.abs(m.vx);
+    }
+    if (m.y < m.r) {
+      m.y = m.r;
+      m.vy = Math.abs(m.vy);
+    } else if (m.y > this.height - m.r) {
+      m.y = this.height - m.r;
+      m.vy = -Math.abs(m.vy);
+    }
+  }
+
+  private targetCount(): number {
+    return CFG.baseMosquitoes + Math.floor(this.silence / CFG.extraPer);
+  }
+
+  // ---------------------------------------------------------------- input
+
+  private onPointer(e: PointerEvent): void {
+    if (this.state !== 'playing') return;
+    this.sfx.unlock();
+
+    const x = e.clientX;
+    const y = e.clientY;
+
+    // Идём с конца — сверху лежит тот, кого нарисовали последним.
+    for (let i = this.mosquitoes.length - 1; i >= 0; i--) {
+      const m = this.mosquitoes[i];
+      const reach = m.r + CFG.hitSlop;
+      if ((m.x - x) ** 2 + (m.y - y) ** 2 <= reach * reach) {
+        this.onHit(i);
+        return;
+      }
+    }
+    this.onMiss(x, y);
+  }
+
+  private onHit(index: number): void {
+    const m = this.mosquitoes[index];
+    this.mosquitoes.splice(index, 1);
+    this.hits++;
+    this.silence = Math.min(100, this.silence + CFG.hitGain);
+    this.rings.push({ x: m.x, y: m.y, age: 0, color: '#7fd4c1' });
+    this.texts.push({ x: m.x, y: m.y - 10, age: 0, text: `+${CFG.hitGain}%`, color: '#7fd4c1' });
+    this.sfx.hit();
+
+    if (this.silence >= 100) {
+      this.updateHud();
+      this.finish(true);
+      return;
+    }
+    while (this.mosquitoes.length < this.targetCount()) this.mosquitoes.push(this.spawn());
+    this.updateHud();
+  }
+
+  private onMiss(x: number, y: number): void {
+    this.misses++;
+    this.timeLeft -= CFG.missPenalty;
+    this.flash = 0.35;
+    this.rings.push({ x, y, age: 0, color: '#ff5d5d' });
+    this.texts.push({ x, y: y - 10, age: 0, text: `−${CFG.missPenalty} с`, color: '#ff5d5d' });
+    this.sfx.miss();
+
+    // Перезапуск CSS-анимации штрафа на таймере.
+    this.timerEl.classList.remove('penalty');
+    void this.timerEl.offsetWidth;
+    this.timerEl.classList.add('penalty');
+
+    if (this.timeLeft <= 0) {
+      this.timeLeft = 0;
+      this.updateHud();
+      this.finish(false);
+      return;
+    }
+    this.updateHud();
+  }
+
+  // ---------------------------------------------------------------- loop
+
+  private frame = (now: number): void => {
+    const dt = Math.min((now - this.last) / 1000, 0.05);
+    this.last = now;
+    this.update(dt);
+    this.draw();
+    requestAnimationFrame(this.frame);
+  };
+
+  private update(dt: number): void {
+    for (const m of this.mosquitoes) this.updateMosquito(m, dt);
+
+    for (const r of this.rings) r.age += dt;
+    for (const t of this.texts) {
+      t.age += dt;
+      t.y -= 45 * dt;
+    }
+    this.rings = this.rings.filter((r) => r.age < 0.45);
+    this.texts = this.texts.filter((t) => t.age < 0.8);
+    this.flash = Math.max(0, this.flash - dt);
+
+    if (this.state === 'playing') {
+      this.elapsed += dt;
+      this.timeLeft -= dt;
+      if (this.timeLeft <= 0) {
+        this.timeLeft = 0;
+        this.updateHud();
+        this.finish(false);
+        return;
+      }
+      this.updateHud();
+    }
+  }
+
+  private updateHud(): void {
+    this.timerEl.textContent = Math.max(0, this.timeLeft).toFixed(1);
+    this.timerEl.classList.toggle('danger', this.timeLeft <= 5);
+    this.barEl.style.width = `${this.silence}%`;
+    const s = this.silence;
+    this.faceEl.textContent = s >= 100 ? '😴' : s >= 75 ? '🥱' : s >= 50 ? '😪' : s >= 25 ? '😣' : '😫';
+  }
+
+
+  
+
+  private draw(): void {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.width, this.height);
+
+    if (this.flash > 0) {
+      ctx.fillStyle = `rgba(255, 70, 70, ${this.flash * 0.45})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+
+    for (const m of this.mosquitoes) this.drawMosquito(m);
+
+    for (const r of this.rings) {
+      const p = r.age / 0.45;
+      ctx.globalAlpha = 1 - p;
+      ctx.strokeStyle = r.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, 10 + p * 38, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.font = '800 20px ui-rounded, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    for (const t of this.texts) {
+      ctx.globalAlpha = 1 - t.age / 0.8;
+      ctx.fillStyle = t.color;
+      ctx.fillText(t.text, t.x, t.y);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private drawMosquito(m: Mosquito): void {
+    const ctx = this.ctx;
+    const boosting = m.boostLeft > 0;
+    const flap = 0.5 + 0.5 * Math.sin(m.wing);
+
+    ctx.save();
+    ctx.translate(m.x, m.y);
+
+    // Крылья: быстро «дрожат» по высоте.
+    ctx.fillStyle = 'rgba(205, 222, 255, 0.55)';
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(side * m.r * 0.55, -m.r * 0.85, m.r * 0.8, m.r * (0.18 + 0.28 * flap), side * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Тело-кружок. Красный — комар в рывке.
+    ctx.fillStyle = boosting ? '#ff5d5d' : '#1d1824';
+    ctx.strokeStyle = boosting ? '#ffd0d0' : '#8f86a8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, m.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Глазки.
+    ctx.fillStyle = '#f2e9c9';
+    ctx.beginPath();
+    ctx.arc(-m.r * 0.35, -m.r * 0.15, m.r * 0.16, 0, Math.PI * 2);
+    ctx.arc(m.r * 0.35, -m.r * 0.15, m.r * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+</file>
+
+<file path="src/main.ts">
+import './style.css';
+import { Game } from './game';
+
+new Game();
+</file>
+
+<file path="src/style.css">
+:root {
+  --night: #0e1330;
+  --window: #26357a;
+  --moon: #f2e9c9;
+  --calm: #7fd4c1;
+  --alarm: #ff5d5d;
+  --ink: #e8ebff;
+  font-family: ui-rounded, 'Nunito', 'Trebuchet MS', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 60% 55% at 78% 18%, var(--window) 0%, transparent 70%),
+    radial-gradient(circle at 12% 90%, #1a2250 0%, transparent 55%), var(--night);
+  color: var(--ink);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#game {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+
+#hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 14px 16px;
+  pointer-events: none;
+}
+
+.hud-row {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.timer {
+  min-width: 4.2ch;
+  font-size: 2.1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--moon);
+  transform-origin: left center;
+}
+
+.timer.danger {
+  color: var(--alarm);
+}
+
+.timer.penalty {
+  animation: penalty 0.4s ease-out;
+}
+
+@keyframes penalty {
+  0% {
+    color: var(--alarm);
+    transform: scale(1.35) translateX(-3px);
+  }
+  25% {
+    transform: scale(1.35) translateX(3px);
+  }
+  50% {
+    transform: scale(1.2) translateX(-2px);
+  }
+  100% {
+    transform: scale(1) translateX(0);
+  }
+}
+
+.sleep {
+  flex: 1;
+  min-width: 0;
+}
+
+.sleep-label {
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+  opacity: 0.8;
+}
+
+.bar {
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5a7bd8, var(--calm));
+  transition: width 0.2s ease-out;
+}
+
+.face {
+  font-size: 2.2rem;
+  line-height: 1;
+  width: 2.4rem;
+  text-align: center;
+}
+
+.mute {
+  pointer-events: auto;
+  border: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font-size: 1.1rem;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.mute:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(8, 10, 28, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.overlay[hidden],
+#hud[hidden] {
+  display: none;
+}
+
+.card {
+  max-width: 460px;
+  padding: 32px 30px;
+  border-radius: 20px;
+  background: #151b45;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 24px 60px rgba(0, 0, 0, 0.5);
+  text-align: left;
+}
+
+.card h1 {
+  margin: 0 0 12px;
+  font-size: 2rem;
+  line-height: 1.15;
+  color: var(--moon);
+}
+
+.card p {
+  margin: 0 0 14px;
+  line-height: 1.55;
+  max-width: 60ch;
+}
+
+.card .stats {
+  color: var(--calm);
+  font-weight: 700;
+}
+
+.card .stats:empty {
+  display: none;
+}
+
+#start {
+  margin-top: 6px;
+  padding: 12px 26px;
+  font: inherit;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #0e1330;
+  background: var(--moon);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+#start:hover {
+  transform: scale(1.04);
+}
+
+#start:focus-visible,
+.mute:focus-visible {
+  outline: 3px solid var(--calm);
+  outline-offset: 3px;
+}
+
+@media (max-width: 520px) {
+  .timer {
+    font-size: 1.6rem;
+  }
+  .face {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timer.penalty {
+    animation: none;
+  }
+  .bar-fill {
+    transition: none;
+  }
+}
+</file>
+
+<file path=".gitignore">
+node_modules/
+dist/
+
+.env
+.env.*
+*.local
+
+*.log
+npm-debug.log*
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#0e1330" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦟</text></svg>"
+    />
+    <title>Ловушка для комара</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud" hidden>
+      <div class="hud-row">
+        <div id="timer" class="timer" aria-label="Осталось секунд">30.0</div>
+        <div class="sleep">
+          <div class="sleep-label">Тишина в комнате</div>
+          <div class="bar"><div id="bar-fill" class="bar-fill"></div></div>
+        </div>
+        <div id="face" class="face" aria-hidden="true">😫</div>
+        <button id="mute" class="mute" type="button" aria-label="Звук">🔊</button>
+      </div>
+    </div>
+
+    <div id="overlay" class="overlay">
+      <div class="card">
+        <h1 id="ov-title">Ловушка для комара</h1>
+        <p id="ov-text">
+          Комары не дают уснуть. Кликай по ним, чтобы в комнате стало тихо.
+          Промах отнимает 2 секунды, а комары то и дело резко меняют курс и
+          ускоряются.
+        </p>
+        <p id="ov-stats" class="stats"></p>
+        <button id="start" type="button">Начать</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+</file>
+
+<file path="package.json">
+{
+  "name": "mosquito-trap",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.3",
+    "vite": "^5.4.11"
+  }
+}
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}
+</file>
+
+<file path="README.md">
+# Ловушка для комара 🦟
+
+Браузерная игра на TypeScript + Vite. Кликай по комарам, пока шкала «Тишина в комнате» не заполнится и персонаж не уснёт.
+
+## Правила
+
+- Попадание: +7 % тишины. Нужно набрать 100 %.
+- Промах: −2 секунды. На всё даётся 30 секунд.
+- Комары отскакивают от краёв окна, внезапно меняют курс, а красные — в рывке.
+- Чем тише в комнате, тем быстрее и многочисленнее комары.
+- Баланс настраивается в объекте `CFG` в `src/game.ts`.
+
+## Запуск
+
+```bash
+npm install
+npm run dev
+npm run build
+npm run preview
+```
+</file>
+
+<file path="vite.config.ts">
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  base: './',
+});
+</file>
+
+</files>
