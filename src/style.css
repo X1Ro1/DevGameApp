@@ -589,3 +589,114 @@ body::after {
     animation: none;
   }
 }
+
+/* ---- v2: комбо, новые комары */
+.chip.combo {
+  color: #ffd166;
+  border-color: rgba(255, 209, 102, 0.5);
+}
+.legend-item[hidden] {
+  display: none;
+}
+.legend-item.decoy {
+  border-color: rgba(255, 209, 102, 0.4);
+}
+.legend-item.split {
+  border-color: rgba(127, 212, 193, 0.4);
+}
+
+/* ---- v3: рекорды и достижения */
+#panel[hidden] {
+  display: none;
+}
+.panel {
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+}
+.tabs {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.tab {
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.tab.on {
+  background: rgba(110, 231, 255, 0.18);
+  border-color: rgba(110, 231, 255, 0.55);
+}
+.name-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+.name-row input {
+  font: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  padding: 6px 10px;
+  width: 11em;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.board,
+.ach-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  text-align: left;
+}
+.board .row {
+  display: grid;
+  grid-template-columns: 1.6em 1fr auto auto auto;
+  gap: 10px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-variant-numeric: tabular-nums;
+}
+.board .who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board .empty {
+  opacity: 0.7;
+  padding: 10px;
+  text-align: center;
+}
+.ach {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  opacity: 0.6;
+}
+.ach.done {
+  opacity: 1;
+  border-color: rgba(127, 212, 193, 0.5);
+}
+.ach b,
+.ach span {
+  display: block;
+}
+.ach span {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+.ach .reward {
+  color: #ffd166;
+}

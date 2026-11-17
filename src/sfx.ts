@@ -60,6 +60,39 @@ export class Sfx {
     src.stop(t + duration);
   }
 
+  private buzzOsc: OscillatorNode | null = null;
+  private buzzGain: GainNode | null = null;
+  /** Непрерывное жужжание: громче, когда комар рядом (intensity 0..1), ниже при заморозке. */
+  buzz(intensity: number, slow: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (!this.buzzOsc || !this.buzzGain) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = 230;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 38;
+      const lg = ctx.createGain();
+      lg.gain.value = 18;
+      lfo.connect(lg).connect(o.frequency);
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = 650;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      o.connect(f).connect(g).connect(ctx.destination);
+      o.start();
+      lfo.start();
+      this.buzzOsc = o;
+      this.buzzGain = g;
+    }
+    const t = ctx.currentTime;
+    this.buzzGain.gain.setTargetAtTime(this.muted ? 0 : 0.004 + 0.03 * intensity, t, 0.1);
+    this.buzzOsc.frequency.setTargetAtTime(slow ? 140 : 220 + intensity * 70, t, 0.08);
+  }
+  buzzStop(): void {
+    if (this.buzzGain && this.ctx) this.buzzGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+  }
   hit(): void {
     this.tone(520, 1100, 0.12, 'triangle', 0.18);
   }

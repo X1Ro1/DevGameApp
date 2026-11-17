@@ -2,7 +2,7 @@ import { Sfx } from './sfx';
 
 type State = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
 type Phase = 1 | 2;
-type Kind = 'normal' | 'frost' | 'bomb';
+type Kind = 'normal' | 'frost' | 'bomb' | 'decoy' | 'split';
 
 const CFG = {
   startTime: 60, // секунд на то, чтобы заснуть
@@ -78,6 +78,7 @@ interface Mosquito {
   wobble: number;
   hurt: number; // таймер «ранен» (тряска и подсветка)
   rage: number; // таймер ауры при превращении
+  ttl?: number; // мотылёк сам улетает через ttl секунд
 }
 
 interface Ring {
@@ -136,6 +137,133 @@ interface WinFx {
 const TAU = Math.PI * 2;
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
 const easeOut = (t: number): number => 1 - (1 - t) ** 3;
+
+// Генератор игровой логики (спавны и курсы): в «ежедневной ночи» он с сидом дня.
+let gameRand: () => number = Math.random;
+const grand = (a: number, b: number): number => a + gameRand() * (b - a);
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const dateKey = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const dateSeed = (): number => [...dateKey()].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+
+// ---- ночи: новый вид комара открывается каждую ночь
+const nightCfg = (n: number) => ({
+  frost: n >= 2,
+  bomb: n >= 3,
+  decoy: n >= 4,
+  split: n >= 5,
+  speed: 1 + Math.min(0.5, (n - 1) * 0.05),
+  base: CFG.baseMosquitoes + (n >= 6 ? 1 : 0),
+});
+const NIGHT_NEW: Record<number, string> = {
+  2: 'Новое: ледяной комар',
+  3: 'Новое: бомба',
+  4: 'Новое: мотылёк — его трогать нельзя',
+  5: 'Новое: делящийся комар',
+};
+
+// ---- достижения и комнаты
+interface AchDef {
+  id: string;
+  name: string;
+  desc: string;
+  theme: string;
+  progress?: (s: Save) => [number, number];
+}
+const ACH: AchDef[] = [
+  { id: 'bomb3', name: 'Мастер взрывов', desc: 'Убей 3 и более комаров одной бомбой', theme: 'forest' },
+  { id: 'combo10', name: 'Серийный охотник', desc: 'Набери комбо ×10', theme: 'sunset' },
+  { id: 'clean2', name: 'Чистая фаза 2', desc: 'Выиграй, не промахнувшись во 2-й фазе', theme: 'aurora' },
+  { id: 'daily', name: 'Ночной дозор', desc: 'Выиграй ежедневную ночь', theme: 'dawn' },
+  { id: 'fast', name: 'Быстрый сон', desc: 'Победа быстрее 35 секунд', theme: '' },
+  { id: 'night3', name: 'Бывалый', desc: 'Открой ночь 3', theme: '', progress: (s) => [Math.min(s.night, 3), 3] },
+  { id: 'night5', name: 'Охотник на мотыльков', desc: 'Открой ночь 5', theme: '', progress: (s) => [Math.min(s.night, 5), 5] },
+  { id: 'wins10', name: 'Десять ночей без сна', desc: 'Выиграй 10 раз', theme: '', progress: (s) => [Math.min(s.wins, 10), 10] },
+];
+const THEMES = [
+  { id: 'night', name: 'Ночь', hue: 0, ach: '' },
+  { id: 'forest', name: 'Лес', hue: -110, ach: 'bomb3' },
+  { id: 'sunset', name: 'Закат', hue: 140, ach: 'combo10' },
+  { id: 'aurora', name: 'Сияние', hue: 70, ach: 'clean2' },
+  { id: 'dawn', name: 'Рассвет', hue: 180, ach: 'daily' },
+];
+
+interface Entry {
+  name: string;
+  score: number;
+  time: number;
+  night: number;
+  daily: boolean;
+  date: string;
+}
+interface Save {
+  night: number;
+  lossStreak: number;
+  games: number;
+  wins: number;
+  name: string;
+  bestSil: Record<string, number>;
+  daily: { date: string; best: number | null };
+  ach: string[];
+  theme: string;
+  board: Entry[];
+}
+const SAVE_KEY = 'mosquito-trap-save-v2';
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+/** Приводит любые данные (localStorage или вставленный код) к безопасному виду. */
+function sanitize(raw: unknown): Save {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const d = r.daily as { date?: unknown; best?: unknown } | undefined;
+  const board = Array.isArray(r.board) ? r.board : [];
+  return {
+    night: Math.max(1, Math.floor(isNum(r.night) ? r.night : 1)),
+    lossStreak: Math.max(0, isNum(r.lossStreak) ? r.lossStreak : 0),
+    games: Math.max(0, isNum(r.games) ? r.games : 0),
+    wins: Math.max(0, isNum(r.wins) ? r.wins : 0),
+    name: typeof r.name === 'string' ? r.name.slice(0, 14) : '',
+    bestSil: r.bestSil && typeof r.bestSil === 'object' ? (r.bestSil as Record<string, number>) : {},
+    daily: { date: typeof d?.date === 'string' ? d.date : '', best: isNum(d?.best) ? d.best : null },
+    ach: Array.isArray(r.ach) ? r.ach.filter((x): x is string => typeof x === 'string') : [],
+    theme: typeof r.theme === 'string' ? r.theme : 'night',
+    board: board
+      .filter((e): e is Entry => !!e && isNum(e.score) && isNum(e.time) && isNum(e.night) && typeof e.name === 'string')
+      .slice(0, 30)
+      .map((e) => ({ name: e.name.slice(0, 14), score: e.score, time: e.time, night: e.night, daily: !!e.daily, date: String(e.date ?? '') })),
+  };
+}
+function loadSave(): Save {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) return sanitize(JSON.parse(raw));
+  } catch {
+    /* localStorage недоступен */
+  }
+  return sanitize(null);
+}
+function mk<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (text) el.textContent = text;
+  return el;
+}
+function writeSave(s: Save): void {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(s));
+  } catch {
+    /* ignore */
+  }
+}
 
 function $<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -301,6 +429,35 @@ export class Game {
   private winFx: WinFx | null = null;
 
   private silence = 0;
+  private save: Save = loadSave();
+  private daily = false;
+  private curNight = 1;
+  private night = nightCfg(1);
+  private assist = 0; // 0..2: помощь после поражений / новичку
+  private combo = 0;
+  private maxCombo = 0;
+  private p2Misses = 0;
+  private bombMax = 0;
+  private decoyIn: number | null = null;
+  private splitIn: number | null = null;
+  private touch = false;
+  private px = 0;
+  private py = 0;
+  private themeAvail = false;
+  private readonly chipCombo = $('chip-combo');
+  private readonly chipComboT = $('chip-combo-t');
+  private readonly dailyBtn = $<HTMLButtonElement>('daily');
+  private readonly themeBtn = $<HTMLButtonElement>('theme');
+  private readonly recordsBtn = $<HTMLButtonElement>('records');
+  private readonly panel = $('panel');
+  private readonly panelBoard = $('panel-board');
+  private readonly tabBoard = $<HTMLButtonElement>('tab-board');
+  private readonly tabAch = $<HTMLButtonElement>('tab-ach');
+  private readonly boardList = $('board-list');
+  private readonly achList = $('ach-list');
+  private readonly nameInput = $<HTMLInputElement>('name-input');
+  private readonly panelMsg = $('panel-msg');
+  private panelTab: 'board' | 'ach' = 'board';
   private timeLeft: number = CFG.startTime;
   private elapsed = 0;
   private hits = 0;
@@ -340,6 +497,10 @@ export class Game {
 
     window.addEventListener('resize', () => this.resize());
     this.canvas.addEventListener('pointerdown', (e) => this.onPointer(e));
+    this.canvas.addEventListener('pointermove', (e) => {
+      this.px = e.clientX;
+      this.py = e.clientY;
+    });
 
     this.startBtn.addEventListener('click', () => {
       this.sfx.unlock();
@@ -347,7 +508,7 @@ export class Game {
     });
     this.restartBtn.addEventListener('click', () => {
       this.sfx.unlock();
-      this.start();
+      this.start(this.daily);
     });
     this.resumeBtn.addEventListener('click', () => this.resume());
     this.pauseBtn.addEventListener('click', () => {
@@ -365,6 +526,10 @@ export class Game {
     // Esc или P (на любой раскладке) — пауза / продолжить.
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
+      if (!this.panel.hidden) {
+        if (e.code === 'Escape') this.closePanel();
+        return;
+      }
       if (e.code === 'Escape' || e.code === 'KeyP') {
         if (this.state === 'playing') this.pause();
         else if (this.state === 'paused') this.resume();
@@ -378,6 +543,43 @@ export class Game {
 
     // Отметка на шкале: с какого процента начинается фаза 2.
     this.barMarkEl.style.left = `${CFG.phase2At}%`;
+    this.dailyBtn.addEventListener('click', () => {
+      this.sfx.unlock();
+      this.start(true);
+    });
+    this.themeBtn.addEventListener('click', () => {
+      const open = this.openThemes();
+      const i = open.findIndex((t) => t.id === this.save.theme);
+      this.save.theme = open[(i + 1) % open.length].id;
+      writeSave(this.save);
+      this.refreshMenu();
+    });
+    this.px = this.width / 2;
+    this.py = this.height / 2;
+    this.refreshMenu();
+    this.recordsBtn.addEventListener('click', () => this.openPanel('board'));
+    this.tabBoard.addEventListener('click', () => this.openPanel('board'));
+    this.tabAch.addEventListener('click', () => this.openPanel('ach'));
+    $('panel-close').addEventListener('click', () => this.closePanel());
+    this.nameInput.addEventListener('input', () => {
+      this.save.name = this.nameInput.value.trim().slice(0, 14);
+      writeSave(this.save);
+    });
+    $('save-copy').addEventListener('click', () => {
+      const code = this.exportCode();
+      const manual = (): void => void window.prompt('Скопируйте код сохранения:', code);
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(code).then(() => {
+          this.panelMsg.textContent = 'Код скопирован. На другом устройстве нажмите «Загрузить код».';
+        }, manual);
+      } else manual();
+    });
+    $('save-load').addEventListener('click', () => {
+      const code = window.prompt('Вставьте код сохранения. Текущий прогресс будет заменён.');
+      if (!code) return;
+      this.panelMsg.textContent = this.importCode(code) ? 'Сохранение загружено.' : 'Не удалось прочитать код.';
+      this.renderPanel();
+    });
 
     for (let i = 0; i < 5; i++) this.mosquitoes.push(this.spawn());
     requestAnimationFrame(this.frame);
@@ -401,9 +603,23 @@ export class Game {
     this.startBtn.hidden = mode !== 'start';
     this.resumeBtn.hidden = mode !== 'pause';
     this.restartBtn.hidden = mode !== 'pause';
+    this.dailyBtn.hidden = mode !== 'start';
+    this.themeBtn.hidden = mode !== 'start' || !this.themeAvail;
+    this.recordsBtn.hidden = mode !== 'start';
   }
 
-  private start(): void {
+  private start(daily = false): void {
+    this.daily = daily;
+    this.curNight = daily ? 5 : this.save.night;
+    this.night = nightCfg(this.curNight);
+    this.assist = daily ? 0 : Math.min(2, this.save.lossStreak + (this.save.games === 0 ? 1 : 0));
+    gameRand = daily ? seeded(dateSeed()) : Math.random;
+    this.combo = 0;
+    this.maxCombo = 0;
+    this.p2Misses = 0;
+    this.bombMax = 0;
+    this.decoyIn = null;
+    this.splitIn = null;
     this.state = 'playing';
     this.phase = 1;
     this.silence = 0;
@@ -425,10 +641,17 @@ export class Game {
     this.texts = [];
     this.particles = [];
     this.mosquitoes = [];
-    for (let i = 0; i < CFG.baseMosquitoes; i++) this.mosquitoes.push(this.spawn());
+    for (let i = 0; i < this.night.base; i++) this.mosquitoes.push(this.spawn());
     this.overlay.hidden = true;
     this.overlay.classList.remove('paused', 'won');
     this.hud.hidden = false;
+    const note = daily ? 'Одинаковые комары для всех сегодня' : NIGHT_NEW[this.curNight] ?? '';
+    const help = this.assist > 0 ? 'комары вялые: штрафы мягче' : '';
+    this.banner = {
+      title: daily ? 'Ежедневная ночь' : `Ночь ${this.curNight}`,
+      sub: [note, help].filter(Boolean).join(' · '),
+      age: 0,
+    };
     this.last = performance.now();
     this.updateHud();
   }
@@ -437,6 +660,7 @@ export class Game {
     if (this.state !== 'playing') return;
     this.state = 'paused';
     this.sfx.pause();
+    this.sfx.buzzStop();
     this.ovIcon.innerHTML = EMBLEMS.pause;
     this.ovTitle.textContent = 'Пауза';
     this.ovText.textContent = 'Таймер и комары замерли. Нажми Esc или P, чтобы продолжить.';
@@ -461,6 +685,9 @@ export class Game {
 
   private finish(won: boolean): void {
     this.state = won ? 'won' : 'lost';
+    this.sfx.buzzStop();
+    this.combo = 0;
+    const extra = this.recordRun(won);
     this.hud.hidden = true;
     this.banner = null;
     this.legendEl.hidden = true;
@@ -470,7 +697,7 @@ export class Game {
     if (won) {
       // Карточку показываем не сразу — сначала играем сцену засыпания.
       const time = this.elapsed;
-      const best = this.saveBest(time);
+      const best = this.daily ? null : this.saveBest(time);
       this.ovIcon.innerHTML = EMBLEMS.won;
       this.ovTitle.textContent = 'Тишина. Он уснул';
       this.ovText.textContent =
@@ -508,8 +735,157 @@ export class Game {
       this.overlay.classList.remove('paused', 'won');
       this.startBtn.focus();
     }
+    this.startLabel.textContent = won ? `Ночь ${this.save.night}` : 'Попробовать снова';
+    this.ovStats.style.whiteSpace = 'pre-line';
+    if (extra.length) this.ovStats.textContent += '\n' + extra.join('\n');
   }
-
+  private openPanel(tab: 'board' | 'ach'): void {
+    this.panelTab = tab;
+    this.panel.hidden = false;
+    this.panelMsg.textContent = '';
+    this.renderPanel();
+  }
+  private closePanel(): void {
+    this.panel.hidden = true;
+  }
+  private renderPanel(): void {
+    const s = this.save;
+    const board = this.panelTab === 'board';
+    this.tabBoard.classList.toggle('on', board);
+    this.tabAch.classList.toggle('on', !board);
+    this.tabAch.textContent = `Достижения ${s.ach.length}/${ACH.length}`;
+    this.panelBoard.hidden = !board;
+    this.achList.hidden = board;
+    this.nameInput.value = s.name;
+    this.boardList.replaceChildren();
+    if (!s.board.length) this.boardList.append(mk('li', 'empty', 'Пока пусто. Выиграй ночь, чтобы попасть в таблицу.'));
+    s.board.slice(0, 10).forEach((e, i) => {
+      const li = mk('li', 'row');
+      li.append(
+        mk('b', '', String(i + 1)),
+        mk('span', 'who', e.name + (e.daily ? ' · Д' : '')),
+        mk('span', '', `Ночь ${e.night}`),
+        mk('span', '', `${e.time.toFixed(1)} с`),
+        mk('strong', '', String(e.score)),
+      );
+      this.boardList.append(li);
+    });
+    this.achList.replaceChildren();
+    for (const a of ACH) {
+      const done = s.ach.includes(a.id);
+      const li = mk('li', done ? 'ach done' : 'ach');
+      const room = THEMES.find((t) => t.id === a.theme);
+      const prog = a.progress?.(s);
+      li.append(mk('b', '', `${done ? '✓ ' : ''}${a.name}`), mk('span', '', a.desc));
+      if (room) li.append(mk('span', 'reward', `Награда: комната «${room.name}»`));
+      if (!done && prog) li.append(mk('span', 'reward', `Прогресс: ${prog[0]}/${prog[1]}`));
+      this.achList.append(li);
+    }
+  }
+  /** Код сохранения: JSON в base64, чтобы перенести прогресс на другое устройство. */
+  private exportCode(): string {
+    let bin = '';
+    new TextEncoder().encode(JSON.stringify(this.save)).forEach((b) => {
+      bin += String.fromCharCode(b);
+    });
+    return btoa(bin);
+  }
+  private importCode(code: string): boolean {
+    try {
+      const bytes = Uint8Array.from(atob(code.trim()), (c) => c.charCodeAt(0));
+      this.save = sanitize(JSON.parse(new TextDecoder().decode(bytes)));
+      writeSave(this.save);
+      this.refreshMenu();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  private openThemes(): typeof THEMES {
+    return THEMES.filter((t) => !t.ach || this.save.ach.includes(t.ach));
+  }
+  private refreshMenu(): void {
+    const s = this.save;
+    for (const k of ['frost', 'bomb', 'decoy', 'split'] as const) {
+      const li = this.legendEl.querySelector<HTMLElement>(`.legend-item.${k}`);
+      if (li) li.hidden = !nightCfg(s.night)[k];
+    }
+    const open = this.openThemes();
+    const th = open.find((t) => t.id === s.theme) ?? open[0];
+    s.theme = th.id;
+    document.documentElement.style.filter = th.hue ? `hue-rotate(${th.hue}deg)` : '';
+    this.themeAvail = open.length > 1;
+    const ts = this.themeBtn.querySelector('span');
+    if (ts) ts.textContent = `Комната: ${th.name}`;
+    const today = s.daily.date === dateKey() ? s.daily.best : null;
+    const ds = this.dailyBtn.querySelector('span');
+    if (ds) ds.textContent = today === null ? 'Ежедневная ночь' : `Ежедневная · ${today.toFixed(1)} с`;
+    this.startLabel.textContent = s.games === 0 ? 'Начать' : `Ночь ${s.night}`;
+    if (this.state === 'menu') {
+      this.ovStats.textContent = s.games > 0 ? `Ночь ${s.night} · достижений: ${s.ach.length}/${ACH.length}` : '';
+    }
+    this.setButtons(this.state === 'paused' ? 'pause' : 'start');
+  }
+  /** Прогресс, рекорды тишины, достижения. Возвращает строки для итоговой карточки. */
+  private recordRun(won: boolean): string[] {
+    const s = this.save;
+    const out: string[] = [];
+    const key = this.daily ? `d${dateKey()}` : String(this.curNight);
+    const time = this.elapsed;
+    if (!this.daily) s.games++;
+    if (won) {
+      s.bestSil[key] = 100;
+      s.wins++;
+      const score = Math.max(0, Math.round(this.curNight * 300 + (90 - time) * 10 - this.misses * 25 + this.maxCombo * 15));
+      s.board.push({ name: s.name || 'Аноним', score, time, night: this.curNight, daily: this.daily, date: dateKey() });
+      s.board.sort((a, b) => b.score - a.score);
+      const rank = s.board.findIndex((e) => e.score === score && e.time === time) + 1;
+      s.board = s.board.slice(0, 30);
+      out.push(`Очки: ${score}${rank > 0 && rank <= 10 ? ` · место в рекордах: ${rank}` : ''}`);
+      if (this.daily) {
+        if (s.daily.date !== dateKey()) s.daily = { date: dateKey(), best: null };
+        const prev = s.daily.best;
+        if (prev === null || time < prev) {
+          s.daily.best = time;
+          out.push(prev === null ? `Время дня: ${time.toFixed(1)} с` : `Новый рекорд дня: ${time.toFixed(1)} с`);
+        }
+      } else {
+        s.lossStreak = 0;
+        s.night = Math.max(s.night, this.curNight + 1);
+      }
+    } else {
+      if (!this.daily) s.lossStreak++;
+      const cur = Math.floor(this.silence);
+      const prev = s.bestSil[key] ?? 0;
+      if (cur > prev) {
+        s.bestSil[key] = cur;
+        if (prev > 0) out.push(`Новый рекорд тишины: ${cur} %`);
+      } else {
+        out.push(cur >= prev - 8 ? `Почти! До рекорда ${prev - cur} %` : `Рекорд тишины: ${prev} %`);
+      }
+    }
+    const unlock = (id: string): void => {
+      if (s.ach.includes(id)) return;
+      s.ach.push(id);
+      const a = ACH.find((x) => x.id === id);
+      const room = THEMES.find((t) => t.id === a?.theme);
+      if (a) out.push(`Достижение: ${a.name}${room ? ` · открыта комната «${room.name}»` : ''}`);
+    };
+    if (this.bombMax >= 3) unlock('bomb3');
+    if (this.maxCombo >= 10) unlock('combo10');
+    if (won && this.phase === 2 && this.p2Misses === 0) unlock('clean2');
+    if (won && this.daily) unlock('daily');
+    if (won && time < 35) unlock('fast');
+    if (s.night >= 3) unlock('night3');
+    if (s.night >= 5) unlock('night5');
+    if (s.wins >= 10) unlock('wins10');
+    writeSave(s);
+    this.refreshMenu();
+    return out;
+  }
+  private vib(p: number | number[]): void {
+    if (!this.sfx.muted) navigator.vibrate?.(p);
+  }
   /** Лучшее время хранится в localStorage (если он доступен). */
   private saveBest(time: number): number | null {
     try {
@@ -525,7 +901,7 @@ export class Game {
 
   // ---------------------------------------------------------- mosquitoes
   private speedMul(): number {
-    return 1 + (this.silence / 100) * CFG.speedGrow;
+    return (1 + (this.silence / 100) * CFG.speedGrow) * this.night.speed * (1 - 0.1 * this.assist);
   }
 
   private bombRadius(): number {
@@ -535,11 +911,11 @@ export class Game {
   private spawn(kind: Kind = 'normal'): Mosquito {
     const special = kind !== 'normal';
     const r = special
-      ? rand(CFG.special.radiusMin, CFG.special.radiusMax)
-      : rand(CFG.radiusMin, CFG.radiusMax);
-    const side = Math.floor(Math.random() * 4);
-    let x = rand(r, this.width - r);
-    let y = rand(r, this.height - r);
+      ? grand(CFG.special.radiusMin, CFG.special.radiusMax)
+      : grand(CFG.radiusMin, CFG.radiusMax);
+    const side = Math.floor(gameRand() * 4);
+    let x = grand(r, this.width - r);
+    let y = grand(r, this.height - r);
     if (side === 0) y = r;
     else if (side === 1) y = this.height - r;
     else if (side === 2) x = r;
@@ -554,17 +930,23 @@ export class Game {
       r,
       turnIn: 0,
       boostLeft: 0,
-      wing: rand(0, 6),
+      wing: grand(0, 6),
       angry: this.phase === 2,
       hp: 1,
       maxHp: 1,
-      wobble: rand(0, 6),
+      wobble: grand(0, 6),
       hurt: 0,
       rage: 0,
     };
     if (this.phase === 2) {
       m.hp = m.maxHp = special ? CFG.special.hp : CFG.p2.hp;
       m.rage = 0.8;
+    }
+    if (kind === 'decoy') {
+      m.hp = m.maxHp = 1;
+      m.ttl = 7;
+    } else if (kind === 'split') {
+      m.hp = m.maxHp = 2;
     }
     this.retarget(m);
     return m;
@@ -578,7 +960,7 @@ export class Game {
     this.retarget(m);
   }
 
-  private spawnSpecial(kind: 'frost' | 'bomb'): void {
+  private spawnSpecial(kind: 'frost' | 'bomb' | 'decoy' | 'split'): void {
     const m = this.spawn(kind);
     this.mosquitoes.push(m);
     this.texts.push({
@@ -586,8 +968,8 @@ export class Game {
       y: Math.max(24, m.y - m.r - 14),
       age: 0,
       life: 1.8,
-      text: kind === 'frost' ? 'Ледяной' : 'Бомба',
-      color: kind === 'frost' ? '#7fe3ff' : '#ff8a5c',
+      text: { frost: 'Ледяной', bomb: 'Бомба', decoy: 'Мотылёк — не трогай!', split: 'Делящийся' }[kind],
+      color: { frost: '#7fe3ff', bomb: '#ff8a5c', decoy: '#ffd166', split: '#7fd4c1' }[kind],
     });
     this.sfx.spawn();
   }
@@ -595,16 +977,16 @@ export class Game {
   /** Комар внезапно выбирает новый курс и скорость (иногда — с рывком). */
   private retarget(m: Mosquito): void {
     const special = m.kind !== 'normal';
-    const angle = rand(0, TAU);
+    const angle = grand(0, TAU);
     const speed =
-      rand(CFG.speedMin, CFG.speedMax) *
+      grand(CFG.speedMin, CFG.speedMax) *
       this.speedMul() *
       (m.angry ? CFG.p2.speedMul : 1) *
       (special ? CFG.special.speedMul : 1);
     m.vx = Math.cos(angle) * speed;
     m.vy = Math.sin(angle) * speed;
     m.turnIn =
-      rand(CFG.turnMin, CFG.turnMax) *
+      grand(CFG.turnMin, CFG.turnMax) *
       (m.angry ? CFG.p2.turnMul : 1) *
       (special ? CFG.special.turnMul : 1);
     const chance = special
@@ -612,7 +994,7 @@ export class Game {
       : m.angry
         ? CFG.p2.boostChance
         : CFG.boostChance;
-    m.boostLeft = Math.random() < chance ? CFG.boostTime : 0;
+    m.boostLeft = gameRand() < chance ? CFG.boostTime : 0;
   }
 
   private updateMosquito(m: Mosquito, dt: number): void {
@@ -671,18 +1053,20 @@ export class Game {
   }
 
   private targetCount(): number {
-    return CFG.baseMosquitoes + Math.floor(this.silence / CFG.extraPer);
+    return this.night.base + Math.floor(this.silence / CFG.extraPer);
   }
 
   private enterPhase2(): void {
     this.phase = 2;
     this.timeLeft += CFG.phase2Bonus;
     for (const m of this.mosquitoes) this.makeAngry(m);
-    this.spawnSpecial('frost');
-    this.spawnSpecial('bomb');
+    if (this.night.frost) this.spawnSpecial('frost');
+    if (this.night.bomb) this.spawnSpecial('bomb');
+    if (this.night.decoy) this.decoyIn = 4;
+    if (this.night.split) this.splitIn = 2;
     this.banner = {
       title: 'Фаза 2: комары озверели!',
-      sub: `+${CFG.phase2Bonus} с · обычные ×2 клика · особые ×3 · промах −${CFG.p2.missPenalty} с`,
+      sub: `+${CFG.phase2Bonus} с · обычные ×2 клика${this.night.frost ? ' · особые ×3' : ''} · промах −${CFG.p2.missPenalty} с`,
       age: 0,
     };
     this.phaseFlash = 0.6;
@@ -701,10 +1085,13 @@ export class Game {
     this.sfx.unlock();
     const x = e.clientX;
     const y = e.clientY;
+    this.touch = e.pointerType === 'touch';
+    this.px = x;
+    this.py = y;
     // Идём с конца — сверху лежит тот, кого нарисовали последним.
     for (let i = this.mosquitoes.length - 1; i >= 0; i--) {
       const m = this.mosquitoes[i];
-      const reach = m.r + CFG.hitSlop;
+      const reach = m.r + CFG.hitSlop + this.assist * 4 + (this.touch ? 6 : 0);
       if ((m.x - x) ** 2 + (m.y - y) ** 2 <= reach * reach) {
         this.damage(i);
         return;
@@ -716,6 +1103,12 @@ export class Game {
   /** Обрабатывает клик по комару и все последствия (включая цепной взрыв). */
   private damage(index: number): void {
     const m = this.mosquitoes[index];
+    if (m.kind === 'decoy') {
+      this.mosquitoes.splice(index, 1);
+      this.decoyIn = 8;
+      this.onMiss(m.x, m.y, 2, 'мотылёк');
+      return;
+    }
     m.hp -= 1;
     let gained: number;
 
@@ -726,6 +1119,7 @@ export class Game {
       this.retarget(m);
       m.boostLeft = CFG.boostTime;
       this.sfx.wound();
+      this.vib(8);
       this.rings.push({ x: m.x, y: m.y, age: 0, life: 0.45, size: 38, color: '#ffb703' });
       this.texts.push({ x: m.x, y: m.y - 10, age: 0, life: 0.8, text: `+${gained}%`, color: '#ffb703' });
       this.burst(m.x, m.y, '#ffb703', 6, 'spark', 160, 0.5, 2);
@@ -733,6 +1127,14 @@ export class Game {
       gained = this.killAt(index);
     }
 
+    this.combo++;
+    this.maxCombo = Math.max(this.maxCombo, this.combo);
+    if (this.combo >= 3 && this.combo % 3 === 0) {
+      gained += Math.min(3, this.combo / 3);
+      this.timeLeft += 0.5;
+      this.texts.push({ x: m.x, y: m.y - 34, age: 0, life: 1, text: `Комбо ×${this.combo}`, color: '#ffd166' });
+      this.pulseTimer('bonus');
+    }
     this.silence = Math.min(100, this.silence + gained);
     if (this.silence >= 100) {
       this.updateHud();
@@ -752,14 +1154,15 @@ export class Game {
     let gained = 0;
 
     if (m.kind === 'normal') {
-      gained = m.angry ? CFG.p2.killGain : CFG.hitGain;
+      gained = m.angry ? (m.r <= 12 ? 2 : CFG.p2.killGain) : CFG.hitGain;
       let label = `+${gained}%`;
-      if (m.angry) {
+      if (m.angry && m.r > 12) {
         this.timeLeft += CFG.p2.killTimeBonus;
         label += ` · +${CFG.p2.killTimeBonus} с`;
         this.pulseTimer('bonus');
       }
       this.sfx.hit();
+      this.vib(12);
       this.rings.push({ x: m.x, y: m.y, age: 0, life: 0.45, size: 38, color: '#7fd4c1' });
       this.texts.push({ x: m.x, y: m.y - 10, age: 0, life: 0.8, text: label, color: '#7fd4c1' });
       this.burst(m.x, m.y, '#7fd4c1', 10, 'dot', 150, 0.6, 2.4);
@@ -779,6 +1182,25 @@ export class Game {
         color: '#7fe3ff',
       });
       this.burst(m.x, m.y, '#9fe8ff', 26, 'flake', 190, 1.1, 2.6);
+    } else if (m.kind === 'decoy') {
+      this.hits--;
+      this.decoyIn = 8;
+      this.burst(m.x, m.y, '#ffd166', 8, 'dot', 120, 0.5, 2);
+    } else if (m.kind === 'split') {
+      gained = 3;
+      this.splitIn = 8;
+      this.sfx.hit();
+      this.rings.push({ x: m.x, y: m.y, age: 0, life: 0.45, size: 44, color: '#7fd4c1' });
+      this.texts.push({ x: m.x, y: m.y - 10, age: 0, life: 0.9, text: `+${gained}% · делится`, color: '#7fd4c1' });
+      this.burst(m.x, m.y, '#7fd4c1', 14, 'dot', 160, 0.6, 2.4);
+      for (let i = 0; i < 2; i++) {
+        const c = this.spawn();
+        c.x = m.x;
+        c.y = m.y;
+        c.r = 12;
+        c.hp = c.maxHp = 1;
+        this.mosquitoes.push(c);
+      }
     } else {
       // Бомба: взрыв убивает всех в радиусе (цепочкой, включая ледяного).
       gained = CFG.special.killGain;
@@ -786,6 +1208,7 @@ export class Game {
       this.blastFlash = 0.3;
       if (!this.reduceMotion) this.shake = 12;
       this.sfx.boom();
+      this.vib([40, 30, 70]);
       const R = this.bombRadius();
       this.rings.push({ x: m.x, y: m.y, age: 0, life: 0.6, size: R, color: '#ff8a5c' });
       this.rings.push({ x: m.x, y: m.y, age: 0, life: 0.45, size: R * 0.55, color: '#ffd7a0' });
@@ -798,6 +1221,7 @@ export class Game {
         const v = this.mosquitoes[i];
         if ((v.x - m.x) ** 2 + (v.y - m.y) ** 2 <= R * R) victims.push(i);
       }
+      this.bombMax = Math.max(this.bombMax, victims.length);
       for (let i = victims.length - 1; i >= 0; i--) {
         gained += this.killAt(victims[i]);
       }
@@ -805,15 +1229,19 @@ export class Game {
     return gained;
   }
 
-  private onMiss(x: number, y: number): void {
-    const penalty = this.phase === 2 ? CFG.p2.missPenalty : CFG.missPenalty;
+  private onMiss(x: number, y: number, fixed?: number, note = ''): void {
+    const penalty =
+      fixed ?? Math.round((this.phase === 2 ? CFG.p2.missPenalty : CFG.missPenalty) * (1 - 0.25 * this.assist) * 10) / 10;
+    this.combo = 0;
+    if (this.phase === 2) this.p2Misses++;
     this.misses++;
     this.timeLeft -= penalty;
     this.flash = 0.35;
     if (!this.reduceMotion) this.shake = Math.max(this.shake, 2.5);
     this.rings.push({ x, y, age: 0, life: 0.45, size: 38, color: '#ff5d5d' });
-    this.texts.push({ x, y: y - 10, age: 0, life: 0.8, text: `−${penalty} с`, color: '#ff5d5d' });
+    this.texts.push({ x, y: y - 10, age: 0, life: 0.8, text: `−${penalty} с${note ? ' · ' + note : ''}`, color: '#ff5d5d' });
     this.sfx.miss();
+    this.vib(30);
     this.pulseTimer('penalty');
     if (this.timeLeft <= 0) {
       this.timeLeft = 0;
@@ -983,6 +1411,7 @@ export class Game {
 
     if (this.state === 'playing') {
       this.elapsed += dt;
+      this.tickExtras(dt);
       this.timeLeft -= dt;
 
       if (this.slowLeft > 0) {
@@ -1036,6 +1465,28 @@ export class Game {
     }
   }
 
+  /** Мотылёк и делящийся по таймеру, жужжание у курсора. */
+  private tickExtras(dt: number): void {
+    for (const m of this.mosquitoes) if (m.ttl !== undefined) m.ttl -= dt;
+    const gone = this.mosquitoes.filter((m) => m.kind === 'decoy' && (m.ttl ?? 1) <= 0);
+    if (gone.length) {
+      this.mosquitoes = this.mosquitoes.filter((m) => !gone.includes(m));
+      this.decoyIn = 8;
+    }
+    if (this.phase === 2) {
+      if (this.decoyIn !== null && (this.decoyIn -= dt) <= 0) {
+        this.decoyIn = null;
+        this.spawnSpecial('decoy');
+      }
+      if (this.splitIn !== null && (this.splitIn -= dt) <= 0) {
+        this.splitIn = null;
+        this.spawnSpecial('split');
+      }
+    }
+    let d = Infinity;
+    for (const m of this.mosquitoes) d = Math.min(d, Math.hypot(m.x - this.px, m.y - this.py));
+    this.sfx.buzz(Math.max(0, 1 - d / 320), this.slowLeft > 0);
+  }
   private updateHud(): void {
     this.timerEl.textContent = Math.max(0, this.timeLeft).toFixed(1);
     this.timerEl.classList.toggle('danger', this.timeLeft <= 10);
@@ -1055,6 +1506,8 @@ export class Game {
     if (this.slowLeft > 0) this.chipSlowT.textContent = `${this.slowLeft.toFixed(1)} с`;
     this.chipFrost.hidden = this.frostIn === null;
     if (this.frostIn !== null) this.chipFrostT.textContent = `${Math.max(0, this.frostIn).toFixed(1)} с`;
+    this.chipCombo.hidden = this.combo < 3;
+    this.chipComboT.textContent = String(this.combo);
     this.chipBomb.hidden = this.bombIn === null;
     if (this.bombIn !== null) this.chipBombT.textContent = `${Math.max(0, this.bombIn).toFixed(1)} с`;
   }
@@ -1333,6 +1786,16 @@ export class Game {
       edge = '#ff6b6b';
       wing = 'rgba(255, 170, 150, 0.5)';
       eye = '#ff5d5d';
+    } else if (m.kind === 'decoy') {
+      body = '#4a3b12';
+      edge = '#ffd166';
+      wing = 'rgba(255, 230, 150, 0.65)';
+      eye = '#ffd166';
+    } else if (m.kind === 'split') {
+      body = '#123a30';
+      edge = '#7fd4c1';
+      wing = 'rgba(160, 255, 220, 0.5)';
+      eye = '#d9fff3';
     } else if (m.angry) {
       body = '#2a1033';
       edge = '#d17bff';

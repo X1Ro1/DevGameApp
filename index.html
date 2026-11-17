@@ -62,6 +62,7 @@
       </div>
 
       <div class="hud-effects" role="status">
+        <span id="chip-combo" class="chip combo" hidden>Комбо&nbsp;×<span id="chip-combo-t" class="chip-t">0</span></span>
         <span id="chip-slow" class="chip slow" hidden>
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <g stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
@@ -100,11 +101,7 @@
       <div class="card">
         <div id="ov-icon" class="ov-icon" aria-hidden="true"></div>
         <h1 id="ov-title">Ловушка для комара</h1>
-        <p id="ov-text">
-          Комары не дают уснуть. Выбей 100&nbsp;% тишины за минуту. Промах
-          отнимает время, а на половине шкалы комары озвереют — и тогда в
-          комнате появятся особые охотничьи цели.
-        </p>
+        <p id="ov-text">Комары не дают уснуть. Кликай по ним, пока в комнате не станет тихо.</p>
 
         <ul id="legend" class="legend">
           <li class="legend-item normal">
@@ -145,11 +142,16 @@
             </svg>
             <div><b>Бомба</b><span>3 клика. Взрыв убивает всех внутри красного радиуса.</span></div>
           </li>
+          <li class="legend-item decoy">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="10.5" cy="14" rx="7" ry="4" fill="rgba(255,230,150,.6)" transform="rotate(-25 10.5 14)"/><ellipse cx="21.5" cy="14" rx="7" ry="4" fill="rgba(255,230,150,.6)" transform="rotate(25 21.5 14)"/><ellipse cx="16" cy="19" rx="3.6" ry="7" fill="#4a3b12" stroke="#ffd166" stroke-width="1.5"/><circle cx="16" cy="10.5" r="2.8" fill="#4a3b12" stroke="#ffd166" stroke-width="1.5"/></svg>
+            <div><b>Мотылёк</b><span>Не трогай! Клик — штраф 2&nbsp;с и сброс комбо.</span></div>
+          </li>
+          <li class="legend-item split">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="10.5" cy="14" rx="7" ry="4" fill="rgba(160,255,220,.5)" transform="rotate(-25 10.5 14)"/><ellipse cx="21.5" cy="14" rx="7" ry="4" fill="rgba(160,255,220,.5)" transform="rotate(25 21.5 14)"/><ellipse cx="16" cy="19" rx="3.6" ry="7" fill="#123a30" stroke="#7fd4c1" stroke-width="1.5"/><circle cx="16" cy="10.5" r="2.8" fill="#123a30" stroke="#7fd4c1" stroke-width="1.5"/></svg>
+            <div><b>Делящийся</b><span>2 клика. После гибели распадается на двух малышей.</span></div>
+          </li>
         </ul>
-        <p id="menu-hint" class="hint">
-          Особые комары появляются в фазе 2 — по одному на экране, возвращаются
-          через 6 с. Пауза — кнопка или клавиша Esc / P.
-        </p>
+        <p id="menu-hint" class="hint">Серия попаданий без промаха даёт комбо: бонус к тишине и времени. Пауза — Esc / P.</p>
 
         <p id="ov-stats" class="stats"></p>
         <div class="actions">
@@ -168,6 +170,29 @@
             </svg>
             <span>Начать заново</span>
           </button>
+          <button id="daily" class="btn secondary" type="button"><span>Ежедневная ночь</span></button>
+          <button id="theme" class="btn secondary" type="button" hidden><span>Комната: Ночь</span></button>
+          <button id="records" class="btn secondary" type="button"><span>Рекорды и достижения</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel" class="overlay" hidden>
+      <div class="card panel">
+        <div class="tabs">
+          <button id="tab-board" class="tab on" type="button">Рекорды</button>
+          <button id="tab-ach" class="tab" type="button">Достижения</button>
+        </div>
+        <div id="panel-board">
+          <label class="name-row">Твоё имя <input id="name-input" maxlength="14" autocomplete="off" placeholder="Аноним" /></label>
+          <ol id="board-list" class="board"></ol>
+        </div>
+        <ul id="ach-list" class="ach-list" hidden></ul>
+        <p id="panel-msg" class="hint"></p>
+        <div class="actions">
+          <button id="save-copy" class="btn secondary" type="button"><span>Копировать код сохранения</span></button>
+          <button id="save-load" class="btn secondary" type="button"><span>Загрузить код</span></button>
+          <button id="panel-close" class="btn" type="button"><span>Закрыть</span></button>
         </div>
       </div>
     </div>
