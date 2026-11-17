@@ -7,9 +7,13 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
     <meta name="theme-color" content="#0e1330" />
+    <meta
+      name="description"
+      content="Ловушка для комара — браузерная игра: выбей 100% тишины за минуту, пока комары не довели до рассвета."
+    />
     <link
       rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦟</text></svg>"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e1330'/%3E%3Cellipse cx='24' cy='26' rx='11' ry='4.5' fill='%236ee7ff' opacity='.45' transform='rotate(-32 24 26)'/%3E%3Cellipse cx='40' cy='26' rx='11' ry='4.5' fill='%236ee7ff' opacity='.45' transform='rotate(32 40 26)'/%3E%3Cellipse cx='32' cy='38' rx='6' ry='10' fill='%23241f30' stroke='%239a8fb8' stroke-width='2'/%3E%3Ccircle cx='32' cy='24' r='4.5' fill='%23241f30' stroke='%239a8fb8' stroke-width='2'/%3E%3Cline x1='32' y1='19' x2='32' y2='11' stroke='%23f2e9c9' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E"
     />
     <title>Ловушка для комара</title>
   </head>
@@ -18,7 +22,7 @@
 
     <div id="hud" hidden>
       <div class="hud-row">
-        <div id="timer" class="timer" aria-label="Осталось секунд">30.0</div>
+        <div id="timer" class="timer" aria-label="Осталось секунд">60.0</div>
         <div class="sleep">
           <div class="sleep-label">
             <span>Тишина в комнате</span>
@@ -29,26 +33,141 @@
             <div id="bar-mark" class="bar-mark" title="Здесь начнётся фаза 2"></div>
           </div>
         </div>
-        <div id="face" class="face" aria-hidden="true">😫</div>
-        <button id="pause" class="mute" type="button" aria-label="Пауза">⏸</button>
-        <button id="mute" class="mute" type="button" aria-label="Звук">🔊</button>
+        <div id="face" class="face" aria-hidden="true"></div>
+        <button id="pause" class="mute" type="button" aria-label="Пауза">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="6.6" y="5" width="3.8" height="14" rx="1.7" fill="currentColor" />
+            <rect x="13.6" y="5" width="3.8" height="14" rx="1.7" fill="currentColor" />
+          </svg>
+        </button>
+        <button
+          id="mute"
+          class="mute"
+          type="button"
+          aria-label="Выключить звук"
+          aria-pressed="false"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9.2v5.6h3.6l5 4V5.2l-5 4H4z" fill="currentColor" />
+            <g class="waves" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M15.6 9.4c1.5 1.5 1.5 3.7 0 5.2" />
+              <path d="M18.3 7.2c2.6 2.7 2.6 6.9 0 9.6" />
+            </g>
+            <g class="slash" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <line x1="15.8" y1="9.5" x2="21" y2="14.7" />
+              <line x1="21" y1="9.5" x2="15.8" y2="14.7" />
+            </g>
+          </svg>
+        </button>
+      </div>
+
+      <div class="hud-effects" role="status">
+        <span id="chip-slow" class="chip slow" hidden>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <g stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <line x1="8" y1="1.8" x2="8" y2="14.2" />
+              <line x1="2.6" y1="4.9" x2="13.4" y2="11.1" />
+              <line x1="2.6" y1="11.1" x2="13.4" y2="4.9" />
+            </g>
+          </svg>
+          Замедление&nbsp;<span id="chip-slow-t" class="chip-t">4.0 с</span>
+        </span>
+        <span id="chip-frost" class="chip frost" hidden>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <g stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <line x1="8" y1="1.8" x2="8" y2="14.2" />
+              <line x1="2.6" y1="4.9" x2="13.4" y2="11.1" />
+              <line x1="2.6" y1="11.1" x2="13.4" y2="4.9" />
+            </g>
+          </svg>
+          Ледяной через&nbsp;<span id="chip-frost-t" class="chip-t">6.0 с</span>
+        </span>
+        <span id="chip-bomb" class="chip bomb" hidden>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="7.4" cy="9.4" r="4.4" fill="currentColor" />
+            <path d="M10.4 6.2q1.6-1.8 3.2-1.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <g stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+              <line x1="13.8" y1="2.2" x2="13.8" y2="4.2" />
+              <line x1="12.4" y1="3.2" x2="14.9" y2="3.2" />
+            </g>
+          </svg>
+          Бомба через&nbsp;<span id="chip-bomb-t" class="chip-t">6.0 с</span>
+        </span>
       </div>
     </div>
 
     <div id="overlay" class="overlay">
       <div class="card">
+        <div id="ov-icon" class="ov-icon" aria-hidden="true"></div>
         <h1 id="ov-title">Ловушка для комара</h1>
         <p id="ov-text">
-          Комары не дают уснуть. Кликай по ним, чтобы в комнате стало тихо.
-          Промах отнимает 2 секунды, а комары то и дело резко меняют курс и
-          ускоряются. Когда станет тише наполовину, комары озвереют: начнётся
-          фаза 2. Пауза — кнопка ⏸ или клавиша Esc / P.
+          Комары не дают уснуть. Выбей 100&nbsp;% тишины за минуту. Промах
+          отнимает время, а на половине шкалы комары озвереют — и тогда в
+          комнате появятся особые охотничьи цели.
         </p>
+
+        <ul id="legend" class="legend">
+          <li class="legend-item normal">
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <ellipse cx="10.5" cy="13" rx="7" ry="3" fill="rgba(205,222,255,.45)" transform="rotate(-30 10.5 13)" />
+              <ellipse cx="21.5" cy="13" rx="7" ry="3" fill="rgba(205,222,255,.45)" transform="rotate(30 21.5 13)" />
+              <ellipse cx="16" cy="19" rx="4.4" ry="7" fill="#241f30" stroke="#9a8fb8" stroke-width="1.5" />
+              <circle cx="16" cy="10" r="3.2" fill="#241f30" stroke="#9a8fb8" stroke-width="1.5" />
+              <line x1="16" y1="6.5" x2="16" y2="2.5" stroke="#f2e9c9" stroke-width="1.6" stroke-linecap="round" />
+              <path d="M12 20q-4 1-5.5 4M20 20q4 1 5.5 4M12.5 23q-3 2-3.5 5M19.5 23q3 2 3.5 5" fill="none" stroke="#9a8fb8" stroke-width="1.1" stroke-linecap="round" />
+            </svg>
+            <div><b>Обычный</b><span>1 клик. В фазе 2 — 2 клика, зато +2 с за убийство.</span></div>
+          </li>
+          <li class="legend-item frost">
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <ellipse cx="10.5" cy="13" rx="7" ry="3" fill="rgba(160,235,255,.5)" transform="rotate(-30 10.5 13)" />
+              <ellipse cx="21.5" cy="13" rx="7" ry="3" fill="rgba(160,235,255,.5)" transform="rotate(30 21.5 13)" />
+              <ellipse cx="16" cy="19" rx="4.4" ry="7" fill="#0f2f46" stroke="#7fe3ff" stroke-width="1.5" />
+              <circle cx="16" cy="10" r="3.2" fill="#0f2f46" stroke="#7fe3ff" stroke-width="1.5" />
+              <line x1="16" y1="6.5" x2="16" y2="2.5" stroke="#d9f7ff" stroke-width="1.6" stroke-linecap="round" />
+              <g stroke="#bfefff" stroke-width="1.3" stroke-linecap="round">
+                <line x1="16" y1="15.8" x2="16" y2="22.2" />
+                <line x1="13.2" y1="17.4" x2="18.8" y2="20.6" />
+                <line x1="13.2" y1="20.6" x2="18.8" y2="17.4" />
+              </g>
+            </svg>
+            <div><b>Ледяной</b><span>3 клика. Замедляет всех комаров на 70&nbsp;% на 4 с.</span></div>
+          </li>
+          <li class="legend-item bomb">
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <circle cx="16" cy="17" r="13" fill="rgba(255,93,93,.07)" stroke="rgba(255,107,107,.55)" stroke-width="1.2" stroke-dasharray="3 3.4" />
+              <ellipse cx="11.5" cy="13.5" rx="6" ry="2.6" fill="rgba(255,170,150,.5)" transform="rotate(-30 11.5 13.5)" />
+              <ellipse cx="20.5" cy="13.5" rx="6" ry="2.6" fill="rgba(255,170,150,.5)" transform="rotate(30 20.5 13.5)" />
+              <ellipse cx="16" cy="19" rx="4.2" ry="6.4" fill="#38101a" stroke="#ff6b6b" stroke-width="1.5" />
+              <circle cx="16" cy="20" r="2.1" fill="#ff5d5d" />
+              <circle cx="16" cy="11" r="3" fill="#38101a" stroke="#ff6b6b" stroke-width="1.5" />
+              <line x1="16" y1="7.7" x2="16" y2="4.5" stroke="#ffd7a0" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+            <div><b>Бомба</b><span>3 клика. Взрыв убивает всех внутри красного радиуса.</span></div>
+          </li>
+        </ul>
+        <p id="menu-hint" class="hint">
+          Особые комары появляются в фазе 2 — по одному на экране, возвращаются
+          через 6 с. Пауза — кнопка или клавиша Esc / P.
+        </p>
+
         <p id="ov-stats" class="stats"></p>
         <div class="actions">
-          <button id="start" class="btn" type="button">Начать</button>
-          <button id="resume" class="btn" type="button" hidden>Продолжить</button>
-          <button id="restart" class="btn secondary" type="button" hidden>Начать заново</button>
+          <button id="start" class="btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6l11-6.8z" fill="currentColor" /></svg>
+            <span id="start-label">Начать</span>
+          </button>
+          <button id="resume" class="btn" type="button" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6l11-6.8z" fill="currentColor" /></svg>
+            <span>Продолжить</span>
+          </button>
+          <button id="restart" class="btn secondary" type="button" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5a7 7 0 1 1-6.4 4.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+              <path d="M4.4 3.8v5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span>Начать заново</span>
+          </button>
         </div>
       </div>
     </div>
